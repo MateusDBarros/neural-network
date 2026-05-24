@@ -39,42 +39,49 @@ class Layer:
 class Network:
 
     def __init__(self, layer_size):
-        self.layers = []
 
-        for i in range(len(layer_size) - 1):
-            self.layers.append(Layer(n_inputs=layer_size[i],
-                                     n_neurons=layer_size[i+1]))
+        self.layers = [Layer(layer_size[i], layer_size[i+1])
+                       for i in range(len(layer_size) - 1)]
 
-    def forward(self, inputs):
+    def forward(self, X):
         for layer in self.layers:
-            inputs = layer.forward(inputs)
-        return inputs
+            X = layer.forward(X)
+        return X
 
-    def backward(self, grad_output, learning_rate):
+    def backward(self, grad, learning_rate):
         for layer in reversed(self.layers):
-            grad_output = layer.backward(grad_output, learning_rate)
+            grad = layer.backward(grad, learning_rate)
 
 
 def mse_loss(predicted, actual):
-    return sum((p - a) ** 2 for p, a in zip(predicted, actual)) / len(predicted)
+    return np.mean((predicted - actual) ** 2)
+
+def mse_grad(predicted, actual):
+    return 2 * (predicted - actual) / predicted.shape[0]
 
 
-X = [[1.0, 0.5, -1.0], [0.2, 0.8, 0.3]]
-Y = [[1.0, 0.0], [0.0, 1.0]]
+Y = np.array([[0], [1], [1], [0]], dtype=float)
 
-net = Network([3, 4, 2])
+X = np.array([
+    [0, 0],
+    [0,1],
+    [1,0],
+    [1,1]
+], dtype=float)
 
-for epoch in range(100):
-    total_loss = 0
+net = Network([2, 4, 1])
 
-    for x, y in zip(X, Y):
-        predicted = net.forward(x)
-        loss = mse_loss(predicted, y)
-        total_loss += loss
+for epoch in range(1000):
 
-        grad = [(p - a) * 2 / len(predicted) for p, a in zip(predicted, y)]
-        net.backward(grad, learning_rate=0.01)
+    predicted = net.forward(X)
+    loss = mse_loss(predicted, Y)
+    grad = mse_grad(predicted, Y)
+    net.backward(grad, learning_rate=0.1)
 
-    if epoch % 10 == 0:
-        print(f"Epoch {epoch} - Loss: {total_loss:.4f}")
 
+    if epoch % 100 == 0:
+        print(f"Epoch {epoch:4d} - Loss: {loss:.4f}")
+
+print("\nFinal predictions:")
+for x, y, p in zip(X, Y, net.forward(X)):
+    print(f" {x} -> expected {y[0]} got {p[0]:.3f}")
