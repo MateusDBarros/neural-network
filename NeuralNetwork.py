@@ -1,6 +1,5 @@
-import random
 import numpy as np
-
+from keras.datasets import mnist
 
 
 # Layers
@@ -62,17 +61,48 @@ class OutputLayer(Layer):
         return grad_input, grad_W, grad_b
 
 
+class SoftmaxOutputLayer(Layer):
+
+    def softmax(self, z):
+        # subtrac max per row for numerical stability to prevent exp overflow
+        z = z - z.max(axis=1, keepdims=True)
+        exp_z = np.exp(z)
+        return exp_z / exp_z.sum(axis=1, keepdims=True)
+
+    def forward(self, X):
+        self.last_input = X
+        self.last_z = X @ self.W + self.b
+        return self.softmax(self.last_z)
+
+    def backward(self, grad_output):
+        # gradient of softmax + cross entropy simplifies to (predict - actual)
+        # whic is already computed outside, so grad_output passes through
+
+        grad_W = self.last_input.T @ grad_output
+        grad_b = grad_output.sum(axis=0)
+        grad_input = grad_output @ self.W.T
+        return grad_input, grad_W, grad_b
+
+
+
 # Network
 
 class Network:
 
-    def __init__(self, layer_size):
+    def __init__(self, layer_size, output='sigmoid'):
+
+        output_map = {
+            'sigmoid': OutputLayer,
+            'softmax': SoftmaxOutputLayer
+        }
 
         self.layers = []
         for i in range(len(layer_size) - 1):
             is_output = (i == len(layer_size) - 2)
-            LayerClass = OutputLayer if is_output else Layer
-            self.layers.append(LayerClass(layer_size[i], layer_size[i + 1]))
+            if is_output:
+                self.layers.append(output_map[output](layer_size[i], layer_size[i + 1]))
+            else:
+                self.layers.append(Layer(layer_size[i], layer_size[i + 1]))
 
     def forward(self, X):
         for layer in self.layers:
@@ -153,27 +183,60 @@ def mse_loss(predicted, actual):
 def mse_grad(predicted, actual):
     return 2 * (predicted - actual) / predicted.shape[0]
 
+def categorical_cross_entropy(predicted, actual):
+    predicted = np.clip(predicted, 1e-7, 1 - 1e-7)
+    return -np.mean(np.sum(actual * np.log(predicted), axis=1))
 
+def categorical_cross_entropy_grad(predicted, actual):
+    return (predicted - actual) / predicted.shape[0]
 
-############
+###### Data Loading ######
 
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
 
+X_train = X_train.reshape(-1, 784) / 255.0
+X_test = X_test.reshape(-1, 784) / 255.0
 
-X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
-Y = np.array([[0], [1], [1], [0]], dtype=float)
+def one_hot(y, n_classes=10):
+    out = np.zeros((len(y), n_classes))
+    out[np.arange(len(y)), y] = 1
+    return out
 
-net = Network([2, 8, 1])
-optimizer = Adam(learning_rate=0.01)
+Y_train = one_hot(y_train)
+Y_test = one_hot(y_test)
 
-for epoch in range(1000):
-    predicted = net.forward(X)
-    loss = binary_cross_entropy(predicted, Y)
-    grad = binary_cross_entropy_grad(predicted, Y)
-    net.backward(grad, optimizer)
+def get_batches(X, Y, batch_size):
+    indices = np.random.permutation(len(X))
+    for i in range(0, len(X), batch_size):
+        idx = indices[i:i + batch_size]
+        yield X[idx], Y[idx]
 
-    if epoch % 100 == 0:
-        print(f"Epoch {epoch:4d} — Loss: {loss:.4f}")
+def accuracy(predicted, actual):
+    pred_classes = np.argmax(predicted, axis=1)
+    actual_classes = np.argmax(actual, axis=1)
+    return np.mean(pred_classes == actual_classes)
 
-print("\nFinal predictions:")
-for x, y, p in zip(X, Y, net.forward(X)):
-    print(f"  {x.tolist()} → expected {int(y[0])}  got {p[0]:.3f}")
+###### Training Loop ######
+
+net       = Network([784, 128, 64, 10], output='softmax')
+optimizer = Adam(learning_rate=0.001)
+epochs    = 20
+batch_size = 64
+
+for epoch in range(epochs):
+    total_loss = 0
+    batches    = 0
+
+    for X_batch, Y_batch in get_batches(X_train, Y_train, batch_size):
+        predicted   = net.forward(X_batch)
+        total_loss += categorical_cross_entropy(predicted, Y_batch)
+        grad        = categorical_cross_entropy_grad(predicted, Y_batch)
+        net.backward(grad, optimizer)
+        batches += 1
+
+    # evaluate on full test set (no backward pass)
+    test_pred = net.forward(X_test)
+    test_acc  = accuracy(test_pred, Y_test)
+    avg_loss  = total_loss / batches
+
+    print(f"Epoch {epoch+1:2d} — Loss: {avg_loss:.4f}  Test accuracy: {test_acc*100:.1f}%")
