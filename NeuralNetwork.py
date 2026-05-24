@@ -1,52 +1,39 @@
 import random
-
-class Neuron:
-
-    def __init__(self, bias, weights):
-        self.bias = bias
-        self.weights = weights
-        self.last_input = None
-        self.last_z = None
-
-    def forward(self, inputs):
-        self.last_input = inputs
-        self.last_z = sum(w *  x for w, x in zip(self.weights, inputs)) + self.bias
-        return self.relu(self.last_z)
-
-    def relu(self, x):
-        return max(0, x)
-
-    def relu_derivative(self, x):
-        return 1 if x > 0 else 0
-
-    def backward(self, grad_output, learning_rate):
-
-        grad_z = grad_output * self.relu_derivative(self.last_z)
-        grad_weights = [grad_z * x for x in self.last_input]
-        grad_input = [grad_z * w for w in self.weights]
-
-        self.weights = [w - learning_rate * gw for w, gw in zip(self.weights, grad_weights)]
-        self.bias -= learning_rate * grad_z
-
-        return grad_input
+import numpy as np
 
 
 class Layer:
     def __init__(self, n_inputs, n_neurons):
-        self.neurons = [Neuron(weights=[random.uniform(-1, 1) for _ in range(n_inputs)],
-                               bias=random.uniform(-1, 1))
-                        for _ in range(n_neurons)]
+        self.W = np.random.randn(n_inputs, n_neurons) * np.sqrt(2.0 / n_inputs)
+        self.b = np.zeros(n_neurons)
+        self.last_input = None
+        self.last_z = None
+
+
+    def relu(self, z):
+        return np.maximum(0,z)
+
+    def relu_derivative(self, z):
+        return (z > 0).astype(float)
+
+    def forward(self, X):
+        self.last_input = X
+        self.last_z = X @ self.W + self.b # batch, n_neurons
+        return self.relu(self.last_z)
+
 
     def backward(self, grad_outputs, learning_rate):
-        grad_inputs = [0] * len(self.neurons[0].last_input)
-        for neuron, grad in zip(self.neurons, grad_outputs):
-            neuron_grads = neuron.backward(grad, learning_rate)
-            grad_inputs = [g + ng for g, ng in zip(grad_inputs, neuron_grads)]
-        return grad_inputs
 
-    def forward(self, inputs):
-        return [neuron.forward(inputs) for neuron in self.neurons]
+        grad_z = grad_outputs * self.relu_derivative(self.last_z)
 
+        grad_W = self.last_input.T @ grad_z
+        grad_b = grad_z.sum(axis=0)
+        grad_input = grad_z @ self.W.T
+
+        self.W -= learning_rate * grad_W
+        self.b -= learning_rate * grad_b
+
+        return grad_input
 
 
 class Network:
@@ -66,7 +53,6 @@ class Network:
     def backward(self, grad_output, learning_rate):
         for layer in reversed(self.layers):
             grad_output = layer.backward(grad_output, learning_rate)
-
 
 
 def mse_loss(predicted, actual):
