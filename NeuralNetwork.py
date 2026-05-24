@@ -84,6 +84,22 @@ class SoftmaxOutputLayer(Layer):
         return grad_input, grad_W, grad_b
 
 
+class DropoutLayer:
+
+    def __init__(self, rate=0.2):
+        self.rate = rate
+        self.mask = None
+        self.training = True
+
+    def forward(self, X):
+        if self.training:
+            self.mask = (np.random.rand(*X.shape) > self.rate) / (1 - self.rate)
+            return X * self.mask
+
+        return X
+
+    def backward(self, grad_output):
+        return grad_output * self.mask, None, None
 
 # Network
 
@@ -93,16 +109,33 @@ class Network:
 
         output_map = {
             'sigmoid': OutputLayer,
-            'softmax': SoftmaxOutputLayer
+            'softmax': SoftmaxOutputLayer,
         }
 
         self.layers = []
-        for i in range(len(layer_size) - 1):
-            is_output = (i == len(layer_size) - 2)
+
+        i = 0
+
+        while i < len(layer_size) - 1:
+            if layer_size[i] == 'dropout':
+                self.layers.append(DropoutLayer())
+                i += 1
+                continue
+
+            next_i = i + 1
+            while next_i < len(layer_size) and layer_size[next_i] == 'dropout':
+                next_i += 1
+
+            if next_i >= len(layer_size):
+                break
+
+            is_output = (next_i == len(layer_size) - 1)
             if is_output:
-                self.layers.append(output_map[output](layer_size[i], layer_size[i + 1]))
+                self.layers.append(output_map[output](layer_size[i], layer_size[next_i]))
             else:
-                self.layers.append(Layer(layer_size[i], layer_size[i + 1]))
+                self.layers.append(Layer(layer_size[i], layer_size[next_i]))
+
+            i = next_i
 
     def forward(self, X):
         for layer in self.layers:
@@ -110,9 +143,22 @@ class Network:
         return X
 
     def backward(self, grad, optimizer):
-        for i, layer in enumerate(reversed(self.layers)):
+        opt_i = 0
+        for layer in reversed(self.layers):
             grad, grad_W, grad_b = layer.backward(grad)
-            optimizer.update(layer, grad_W, grad_b, layer_id=i)
+            if grad_W is not None:
+                optimizer.update(layer, grad_W, grad_b, layer_id=opt_i)
+                opt_i += 1
+
+    def train(self):
+        for layer in self.layers:
+            if isinstance(layer, DropoutLayer):
+                layer.training = True
+
+    def eval(self):
+        for layer in self.layers:
+            if isinstance(layer, DropoutLayer):
+                layer.training = False
 
 
 
@@ -190,12 +236,16 @@ def categorical_cross_entropy(predicted, actual):
 def categorical_cross_entropy_grad(predicted, actual):
     return (predicted - actual) / predicted.shape[0]
 
-###### Data Loading ######
+# Data
 
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
 
 X_train = X_train.reshape(-1, 784) / 255.0
 X_test = X_test.reshape(-1, 784) / 255.0
+
+
+# Helpers
+
 
 def one_hot(y, n_classes=10):
     out = np.zeros((len(y), n_classes))
@@ -218,12 +268,13 @@ def accuracy(predicted, actual):
 
 ###### Training Loop ######
 
-net       = Network([784, 128, 64, 10], output='softmax')
+net       = Network([784, 128, 'dropout', 64, 'dropout', 10], output='softmax')
 optimizer = Adam(learning_rate=0.001)
 epochs    = 20
 batch_size = 64
 
 for epoch in range(epochs):
+    net.train()
     total_loss = 0
     batches    = 0
 
@@ -234,7 +285,7 @@ for epoch in range(epochs):
         net.backward(grad, optimizer)
         batches += 1
 
-    # evaluate on full test set (no backward pass)
+    net.eval()
     test_pred = net.forward(X_test)
     test_acc  = accuracy(test_pred, Y_test)
     avg_loss  = total_loss / batches
