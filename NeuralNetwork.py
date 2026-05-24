@@ -2,7 +2,12 @@ import random
 import numpy as np
 
 
+
+# Layers
+
 class Layer:
+    """"Hidden layer - ReLU"""
+
     def __init__(self, n_inputs, n_neurons):
         self.W = np.random.randn(n_inputs, n_neurons) * np.sqrt(2.0 / n_inputs)
         self.b = np.zeros(n_neurons)
@@ -10,11 +15,11 @@ class Layer:
         self.last_z = None
 
 
-    def relu(self, z):
-        return np.maximum(0,z)
+    def relu(self, z, alpha=0.01):
+        return np.where(z > 0, z, alpha * z)
 
-    def relu_derivative(self, z):
-        return (z > 0).astype(float)
+    def relu_derivative(self, z, alpha=0.01):
+        return np.where(z > 0, 1.0, alpha)
 
     def forward(self, X):
         self.last_input = X
@@ -22,7 +27,7 @@ class Layer:
         return self.relu(self.last_z)
 
 
-    def backward(self, grad_outputs, learning_rate):
+    def backward(self, grad_outputs):
 
         grad_z = grad_outputs * self.relu_derivative(self.last_z)
 
@@ -30,10 +35,31 @@ class Layer:
         grad_b = grad_z.sum(axis=0)
         grad_input = grad_z @ self.W.T
 
-        self.W -= learning_rate * grad_W
-        self.b -= learning_rate * grad_b
+        return grad_input, grad_W, grad_b
 
-        return grad_input
+
+class OutputLayer(Layer):
+    """"Output Layer - Sigmoid activation for binary classification."""
+
+    def sigmoid(self, z):
+        return 1 / (1 + np.exp(-np.clip(z, -500, 500)))
+
+    def sigmoid_derivative(self, z):
+        s = self.sigmoid(z)
+        return s * (1 - s)
+
+    def forward(self, X):
+        self.last_input = X
+        self.last_z = X @ self.W + self.b
+        return self.sigmoid(self.last_z)
+
+    def backward(self, grad_outputs):
+
+        grad_z = grad_outputs * self.sigmoid_derivative(self.last_z)
+        grad_W = self.last_input.T @ grad_z
+        grad_b = grad_z.sum(axis=0)
+        grad_input = grad_z @ self.W.T
+        return grad_input, grad_W, grad_b
 
 
 class Network:
@@ -69,7 +95,7 @@ X = np.array([
     [1,1]
 ], dtype=float)
 
-net = Network([2, 4, 1])
+net = Network([2, 8, 1])
 
 for epoch in range(1000):
 
