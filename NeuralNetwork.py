@@ -64,7 +64,7 @@ class OutputLayer(Layer):
 class SoftmaxOutputLayer(Layer):
 
     def softmax(self, z):
-        # subtrac max per row for numerical stability to prevent exp overflow
+        # subtract max per row for numerical stability to prevent exp overflow
         z = z - z.max(axis=1, keepdims=True)
         exp_z = np.exp(z)
         return exp_z / exp_z.sum(axis=1, keepdims=True)
@@ -76,7 +76,7 @@ class SoftmaxOutputLayer(Layer):
 
     def backward(self, grad_output):
         # gradient of softmax + cross entropy simplifies to (predict - actual)
-        # whic is already computed outside, so grad_output passes through
+        # which is already computed outside, so grad_output passes through
 
         grad_W = self.last_input.T @ grad_output
         grad_b = grad_output.sum(axis=0)
@@ -101,6 +101,44 @@ class DropoutLayer:
     def backward(self, grad_output):
         return grad_output * self.mask, None, None
 
+
+class BatchNormLayer:
+    def __init__(self, n_inputs, momentum=0.9, epsilon=1e-8):
+        self.gamma = np.ones(n_inputs)   # learned scale
+        self.beta = np.zeros(n_inputs)  # learned shift
+        self.epsilon = epsilon
+        self.momentum = momentum
+        self.running_mean = np.zeros(n_inputs)
+        self.running_var  = np.ones(n_inputs)
+        self.x_norm  = None
+        self.std     = None
+        self.last_input = None
+        self.training = True
+
+    def forward(self, X):
+        if self.training:
+            mean = X.mean(axis=0)
+            var  = X.var(axis=0)
+            self.std = np.sqrt(var + self.epsilon)
+            self.x_norm = (X - mean) / self.std
+            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mean
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var
+        else:
+            std = np.sqrt(self.running_var + self.epsilon)
+            self.x_norm = (X - self.running_mean) / std
+
+        return self.gamma * self.x_norm + self.beta
+
+    def backward(self, grad_output):
+        N = grad_output.shape[0]
+        grad_gamma = (grad_output * self.x_norm).sum(axis=0)
+        grad_beta = grad_output.sum(axis=0)
+        dx_norm = grad_output * self.gamma
+        grad_input = (1 / (N * self.std)) * (
+            N * dx_norm - dx_norm.sum(axis=0) - self.x_norm * (dx_norm * self.x_norm).sum(axis=0)
+        )
+        return grad_input, grad_gamma, grad_beta
+
 # Network
 
 class Network:
@@ -111,30 +149,33 @@ class Network:
             'sigmoid': OutputLayer,
             'softmax': SoftmaxOutputLayer,
         }
-
         self.layers = []
-
         i = 0
 
         while i < len(layer_size) - 1:
+            size = layer_size[i]
+
             if layer_size[i] == 'dropout':
                 self.layers.append(DropoutLayer())
                 i += 1
                 continue
 
+            if layer_size[i] == 'batchnorm':
+                prev = next(s for s in reversed(layer_size[:i]) if isinstance(s, int))
+                self.layers.append(BatchNormLayer(prev))
+                i += 1
+                continue
+
             next_i = i + 1
-            while next_i < len(layer_size) and layer_size[next_i] == 'dropout':
+            while next_i < len(layer_size) and not isinstance(layer_size[next_i], int):
                 next_i += 1
 
             if next_i >= len(layer_size):
                 break
 
             is_output = (next_i == len(layer_size) - 1)
-            if is_output:
-                self.layers.append(output_map[output](layer_size[i], layer_size[next_i]))
-            else:
-                self.layers.append(Layer(layer_size[i], layer_size[next_i]))
-
+            LayerClass = output_map[output] if is_output else Layer
+            self.layers.append(LayerClass(layer_size[i], layer_size[next_i]))
             i = next_i
 
     def forward(self, X):
@@ -152,12 +193,12 @@ class Network:
 
     def train(self):
         for layer in self.layers:
-            if isinstance(layer, DropoutLayer):
+            if isinstance(layer, (DropoutLayer, BatchNormLayer)):
                 layer.training = True
 
     def eval(self):
         for layer in self.layers:
-            if isinstance(layer, DropoutLayer):
+            if isinstance(layer, (DropoutLayer, BatchNormLayer)):
                 layer.training = False
 
 
@@ -191,8 +232,8 @@ class Adam:
         self.t += 1
 
         if layer_id not in self.m:
-            self.m[layer_id] = {'W': np.zeros_like(layer.W), 'b': np.zeros_like(layer.b)}
-            self.v[layer_id] = {'W': np.zeros_like(layer.W), 'b': np.zeros_like(layer.b)}
+            self.m[layer_id] = {'W': np.zeros_like(layer.W), 'b': np.zeros_like(grad_b)}
+            self.v[layer_id] = {'W': np.zeros_like(layer.W), 'b': np.zeros_like(grad_b)}
 
         # update biased moments
         self.m[layer_id]['W'] = self.beta1 * self.m[layer_id]['W'] + (1 - self.beta1) * grad_W
@@ -201,16 +242,16 @@ class Adam:
         self.v[layer_id]['b'] = self.beta2 * self.v[layer_id]['b'] + (1 - self.beta2) * grad_b ** 2
 
         # bias correction
-        m_hat_W =self.m [layer_id]['W'] / (1 - self.beta1 ** self.t)
-        m_hat_b =self.m [layer_id]['b'] / (1 - self.beta1 ** self.t)
-        v_hat_W =self.v [layer_id]['W'] / (1 - self.beta2 ** self.t)
-        v_hat_b =self.v [layer_id]['b'] / (1 - self.beta2 ** self.t)
+        m_hat_W = self.m [layer_id]['W'] / (1 - self.beta1 ** self.t)
+        m_hat_b = self.m [layer_id]['b'] / (1 - self.beta1 ** self.t)
+        v_hat_W = self.v [layer_id]['W'] / (1 - self.beta2 ** self.t)
+        v_hat_b = self.v [layer_id]['b'] / (1 - self.beta2 ** self.t)
 
-        # Weight uppdate ( step size shinks as v grows
-        layer.W -= self.lr * m_hat_W / (np.sqrt(v_hat_W) + self.epsilon)
-        layer.b -= self.lr * m_hat_b / (np.sqrt(v_hat_b) + self.epsilon)
+        grad_W_attr = 'gamma' if hasattr(layer, 'gamma') else 'W'
+        grad_b_attr = 'beta' if hasattr(layer, 'beta') else 'b'
 
-
+        getattr(layer, grad_W_attr)[:] -= self.lr * m_hat_W / (np.sqrt(v_hat_W) + self.epsilon)
+        getattr(layer, grad_b_attr)[:] -= self.lr * m_hat_b / (np.sqrt(v_hat_b) + self.epsilon)
 
 
 # Loss
@@ -268,7 +309,7 @@ def accuracy(predicted, actual):
 
 ###### Training Loop ######
 
-net       = Network([784, 128, 'dropout', 64, 'dropout', 10], output='softmax')
+net       = Network([784, 128, 'batchnorm', 'dropout', 64, 'batchnorm','dropout', 10], output='softmax')
 optimizer = Adam(learning_rate=0.001)
 epochs    = 20
 batch_size = 64
