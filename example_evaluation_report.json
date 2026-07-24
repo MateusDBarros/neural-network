@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-06-08T16:01:39.075304",
+  "overall_score": 98.46507,
+  "performance": {
+    "train_accuracy": 0.9902333333333333,
+    "test_accuracy": 0.9753,
+    "train_loss": 0.03133141474939633,
+    "test_loss": 0.08016361619797747,
+    "overfitting_gap": 0.014933333333333354,
+    "per_class_accuracy": {
+      "0": 0.9877551020408163,
+      "1": 0.9938325991189427,
+      "2": 0.9689922480620154,
+      "3": 0.9861386138613861,
+      "4": 0.9857433808553971,
+      "5": 0.9596412556053812,
+      "6": 0.9812108559498957,
+      "7": 0.9678988326848249,
+      "8": 0.9568788501026694,
+      "9": 0.9613478691774033
+    },
+    "reasoning": {
+      "test_accuracy": "Primary metric for model effectiveness on unseen data",
+      "overfitting_gap": "Measures generalization: large gap indicates overfitting",
+      "per_class_accuracy": "Identifies which classes the model struggles with"
+    }
+  },
+  "efficiency": {
+    "inference_time_single": 0.0001291060447692871,
+    "inference_time_batch": 0.0007969379425048828,
+    "throughput": 80307.3822772692,
+    "forward_pass_flops": 218368,
+    "backward_pass_flops": 436736,
+    "reasoning": {
+      "inference_time_single": "Critical for real-time applications and user experience",
+      "throughput": "Determines scalability and batch processing capability",
+      "total_flops_per_sample": "Indicates computational complexity and hardware requirements"
+    }
+  },
+  "resources": {
+    "total_parameters": 109386,
+    "model_size_mb": 0.41727447509765625,
+    "peak_memory_mb": 1.762847900390625,
+    "weights_memory_mb": 0.41727447509765625,
+    "activations_memory_mb": 0.09375,
+    "reasoning": {
+      "total_parameters": "Determines model capacity and minimum memory requirements",
+      "peak_memory_mb": "Critical for deployment on resource-constrained devices",
+      "activation_memory_ratio": "High ratio indicates memory bottleneck during training"
+    }
+  },
+  "architecture": {
+    "total_layers": 3,
+    "hidden_layers": 2,
+    "network_width": 128,
+    "network_depth": 2,
+    "has_batch_norm": false,
+    "has_dropout": false,
+    "trade_offs": {
+      "depth_vs_width": "Network has 2 hidden layers with max width 128. Deeper networks learn hierarchical features but are harder to train",
+      "regularization": "Uses no regularization. Dropout/BatchNorm prevent overfitting but add computational cost",
+      "bottleneck": "Bottleneck layer of size 64 forces dimensionality reduction, which can improve generalization but may lose information"
+    }
+  },
+  "strengths": [
+    "High accuracy (97.5%)",
+    "Good generalization (low overfitting)",
+    "Fast inference (80307 samples/sec)",
+    "Compact model (0.42 MB)"
+  ],
+  "weaknesses": [],
+  "recommendations": []
+}
