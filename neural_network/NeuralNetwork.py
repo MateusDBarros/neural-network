@@ -1,6 +1,5 @@
 import numpy as np
 from keras.datasets import mnist
-from torch.nn import Flatten
 
 
 # Layers

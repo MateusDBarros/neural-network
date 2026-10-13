@@ -29,8 +29,7 @@ The work led to a published mini-paper in the **TLC-BR (IBM Open Innovation Comm
 ├── experiments/            # Alternative implementations for comparison
 │   ├── keras_option.py     #   Same network in Keras
 │   ├── pytorch_option.py   #   Same network in PyTorch
-│   ├── api_demo.py         #   Minimal FastAPI endpoint
-│   └── main_demo.py        #   PyCharm hello-world stub
+│   └── api_demo.py         #   Minimal FastAPI endpoint
 │
 ├── docs/                   # Documentation and the published paper
 │   ├── GPT_do_Zero_TLC-BR_2026.pdf
