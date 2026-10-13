@@ -9,6 +9,7 @@ Treina o GPT em NumPy e imprime os artefatos necessários para o artigo:
 """
 
 import json
+from pathlib import Path
 import numpy as np
 from gpt_numpy import GPTConfig, GPT, CharTokenizer, Trainer, count_params
 
@@ -192,7 +193,8 @@ report = {
 }
 
 # Salva JSON
-with open("gpt_report.json", "w", encoding="utf-8") as f:
+REPORT_PATH = Path(__file__).resolve().parent.parent / "reports" / "gpt_report.json"
+with open(REPORT_PATH, "w", encoding="utf-8") as f:
     json.dump(report, f, ensure_ascii=False, indent=2)
 
 # Imprime resumo legível
@@ -228,5 +230,5 @@ for prompt, text in generations.items():
     print(f"  Gerado   : {continuation!r}")
 
 print("\n" + "═" * 62)
-print("  Relatório completo salvo em: gpt_report.json")
+print(f"  Relatório completo salvo em: {REPORT_PATH}")
 print("═" * 62)

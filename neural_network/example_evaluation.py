@@ -5,6 +5,7 @@ This script demonstrates how to evaluate a trained neural network
 using the comprehensive evaluation framework.
 """
 
+from pathlib import Path
 from evaluation_framework import NeuralNetworkEvaluator, benchmark_against_baseline
 from NeuralNetwork import (
     Network, Adam,
@@ -77,7 +78,7 @@ def main():
     
     # Step 5: Save report
     print("\n[Step 5] Saving Report...")
-    evaluator.save_report('example_evaluation_report.json')
+    evaluator.save_report(str(Path(__file__).resolve().parent.parent / 'reports' / 'example_evaluation_report.json'))
     
     # Step 6: Compare with baseline
     print("\n[Step 6] Comparing with Baseline...")
@@ -116,7 +117,7 @@ def main():
             print(f"   • {rec}")
     
     print("\n" + "=" * 70)
-    print("Check 'example_evaluation_report.json' for detailed results!")
+    print("Check 'reports/example_evaluation_report.json' for detailed results!")
     print("=" * 70)
 
 
